@@ -8,7 +8,6 @@ import (
 	"context"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"log"
 	"os"
 	"path/filepath"
@@ -31,7 +30,7 @@ type WindowsContainerCommunicator struct {
 // Upload uses docker exec to copy the file from the host to the container
 func (c *WindowsContainerCommunicator) Upload(dst string, src io.Reader, fi *os.FileInfo) error {
 	// Create a temporary file to store the upload
-	tempfile, err := ioutil.TempFile(c.HostDir, "upload")
+	tempfile, err := os.CreateTemp(c.HostDir, "upload")
 	if err != nil {
 		return err
 	}
@@ -50,9 +49,11 @@ func (c *WindowsContainerCommunicator) Upload(dst string, src io.Reader, fi *os.
 
 	// Copy the file into place by copying the temporary file we put
 	// into the shared folder into the proper location in the container
+	// Additionally, create the parent folder if it does not exist
+	dstDir, dstFilename := filepath.Split(dst)
 	cmd := &packersdk.RemoteCmd{
-		Command: fmt.Sprintf("Copy-Item -Path %s/%s -Destination %s", c.ContainerDir,
-			filepath.Base(tempfile.Name()), dst),
+		Command: fmt.Sprintf("Copy-Item -Force -Path %s/%s -Destination (Join-Path (New-Item -Type Directory -Force %s) %s)", c.ContainerDir,
+			filepath.Base(tempfile.Name()), dstDir, dstFilename),
 	}
 	ctx := context.TODO()
 	if err := c.Start(ctx, cmd); err != nil {
@@ -71,7 +72,7 @@ func (c *WindowsContainerCommunicator) Upload(dst string, src io.Reader, fi *os.
 func (c *WindowsContainerCommunicator) UploadDir(dst string, src string, exclude []string) error {
 	// Create the temporary directory that will store the contents of "src"
 	// for copying into the container.
-	td, err := ioutil.TempDir(c.HostDir, "dirupload")
+	td, err := os.MkdirTemp(c.HostDir, "dirupload")
 	if err != nil {
 		return err
 	}
